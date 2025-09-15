@@ -102,9 +102,10 @@ const WebCamFeed = ({
     videoRef.current.srcObject = stream;
 
     const faceMesh = new FaceMesh({
-      locateFile: (f) =>
-        `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`,
+      locateFile: (file) =>
+        `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`,
     });
+
     faceMesh.setOptions({
       maxNumFaces: 3,
       refineLandmarks: true,
@@ -159,6 +160,9 @@ const WebCamFeed = ({
       }
     });
 
+    videoRef.current.srcObject = stream;
+    videoRef.current.play();
+    
     const processFrame = async () => {
       if (videoRef.current.videoWidth > 0) {
         await faceMesh.send({ image: videoRef.current });
@@ -186,6 +190,8 @@ const WebCamFeed = ({
       cancelAnimationFrame(animRef.current);
       faceMesh.close();
     };
+
+    
   }, [stream, objectModel, interviewEnded]);
 
   useEffect(() => {
@@ -203,6 +209,7 @@ const WebCamFeed = ({
     }, 1000);
     return () => clearInterval(interval);
   }, [onProctorEvent, interviewEnded]);
+  
 
   return (
     <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden shadow-inner">
