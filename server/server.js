@@ -8,8 +8,10 @@ const sessionRoutes = require("./routes/sessions");
 require("dotenv").config();
 
 const app = express();
-app.use(cors());
-app.use(express.json());
+app.use(cors({
+  origin: `${process.env.FRONTEND_URL}`, 
+  methods: ["GET", "POST"],
+}));app.use(express.json());
 
 connectDB();
 
