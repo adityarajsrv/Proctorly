@@ -20,6 +20,7 @@ const Dashboard = () => {
       type: "info",
     },
   ]);
+  const [cameraError, setCameraError] = useState(false);
 
   const videoStreamRef = useRef(null);
   const lastEventTime = useRef({ face: 0, object: {} });
@@ -50,7 +51,6 @@ const Dashboard = () => {
     }
   };
 
-  // Face Detection Handler 
   const handleFaceDetected = (count) => {
     setFacesDetected(count);
     const now = Date.now();
@@ -97,21 +97,25 @@ const Dashboard = () => {
     }
   };
 
+  const initCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: 640, height: 480 },
+        audio: true,
+      });
+      videoStreamRef.current = stream;
+      setIsRecording(true);
+      setCameraError(false);
+    } catch (e) {
+      console.error("Camera or microphone access denied:", e);
+      setCameraError(true);
+      setIsRecording(false);
+    }
+  };
+
   useEffect(() => {
     timerRef.current = setInterval(() => setSessionTime((s) => s + 1), 1000);
-    const init = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: 640, height: 480 },
-          audio: true,
-        });
-        videoStreamRef.current = stream;
-        setIsRecording(true);
-      } catch (e) {
-        console.error("Camera error:", e);
-      }
-    };
-    init();
+    initCamera();
     return () => stopStream();
   }, []);
 
@@ -151,7 +155,6 @@ const Dashboard = () => {
     };
 
     const deductionMap = {};
-
     finalEventLog.forEach((e) => {
       if (e.type === "alert") {
         const key = e.message;
@@ -163,13 +166,8 @@ const Dashboard = () => {
       }
     });
 
-    const totalDeduction = Object.values(deductionMap).reduce(
-      (a, b) => a + b,
-      0
-    );
-
+    const totalDeduction = Object.values(deductionMap).reduce((a, b) => a + b, 0);
     const scaledDeduction = totalDeduction * Math.min(sessionTime / 60, 1);
-
     const integrityScore = (Math.max(0, 100 - scaledDeduction)).toPrecision(2);
 
     try {
@@ -190,17 +188,10 @@ const Dashboard = () => {
 
     setEventLog((prev) => [
       ...prev,
-      {
-        time: new Date().toLocaleTimeString(),
-        message: "Interview ended",
-        type: "info",
-      },
+      { time: new Date().toLocaleTimeString(), message: "Interview ended", type: "info" },
     ]);
 
-    generatePDF(
-      integrityScore,
-      finalEventLog.filter((e) => e.type === "alert")
-    );
+    generatePDF(integrityScore, finalEventLog.filter((e) => e.type === "alert"));
 
     Swal.fire({
       title: "Interview Ended",
@@ -208,18 +199,15 @@ const Dashboard = () => {
       <div class="text-left space-y-2">
         <p><strong>Candidate:</strong> ${candidateName}</p>
         <p><strong>Duration:</strong> ${formatTime(sessionTime)}</p>
-        <p><strong>Total Alerts:</strong> ${
-          finalEventLog.filter((e) => e.type === "alert").length
-        }</p>
+        <p><strong>Total Alerts:</strong> ${finalEventLog.filter((e) => e.type === "alert").length}</p>
         <p class="text-sm text-gray-500 mt-2">PDF Report has been generated and downloaded.</p>
       </div>
-    `,
+      `,
       icon: "success",
       confirmButtonText: "Close",
       customClass: {
         popup: "rounded-2xl shadow-xl p-6",
-        confirmButton:
-          "bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700",
+        confirmButton: "bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700",
       },
       buttonsStyling: false,
     });
@@ -260,10 +248,7 @@ const Dashboard = () => {
   };
 
   const formatTime = (s) =>
-    `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(
-      2,
-      "0"
-    )}`;
+    `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -282,7 +267,18 @@ const Dashboard = () => {
       </header>
 
       <main className="flex flex-col lg:flex-row gap-6 p-4">
-        <div className="lg:w-2/3">
+        <div className="lg:w-2/3 relative">
+          {cameraError && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black text-white text-center p-4">
+              <p className="mb-4">Camera & Microphone access required to start session.</p>
+              <button
+                className="px-6 py-2 bg-blue-600 rounded-lg hover:bg-blue-700"
+                onClick={initCamera}
+              >
+                Retry
+              </button>
+            </div>
+          )}
           <WebCamFeed
             stream={videoStreamRef.current}
             onFaceDetected={handleFaceDetected}
@@ -301,11 +297,7 @@ const Dashboard = () => {
               {eventLog.map((e, i) => (
                 <li
                   key={i}
-                  className={
-                    e.type === "alert"
-                      ? "text-red-600 font-medium"
-                      : "text-blue-600"
-                  }
+                  className={e.type === "alert" ? "text-red-600 font-medium" : "text-blue-600"}
                 >
                   <span className="mr-2">{e.time}</span>
                   {e.message}
@@ -317,20 +309,14 @@ const Dashboard = () => {
           <div className="bg-white rounded p-4 shadow space-y-2">
             <div>
               Current faces detected:{" "}
-              <strong
-                className={
-                  facesDetected > 1 ? "text-red-600" : "text-green-700"
-                }
-              >
+              <strong className={facesDetected > 1 ? "text-red-600" : "text-green-700"}>
                 {facesDetected}
               </strong>
             </div>
             <div>
               Suspicious items detected:{" "}
               {objectDetected.length > 0 ? (
-                <strong className="text-red-600">
-                  {objectDetected.join(", ")}
-                </strong>
+                <strong className="text-red-600">{objectDetected.join(", ")}</strong>
               ) : (
                 <span className="text-green-700">None</span>
               )}
