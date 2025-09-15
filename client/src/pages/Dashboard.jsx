@@ -24,24 +24,10 @@ const Dashboard = () => {
   const EVENT_COOLDOWN = 5000;
   const timerRef = useRef(null);
 
-  const interviewEnded = useRef(false); // Flag to stop logging
+  const interviewEnded = useRef(false); 
 
-  // Alert weightage
-  const ALERT_WEIGHTS = {
-    "background-voice": 3,
-    "eye-closure": 5,
-    "multiple-faces": 10,
-    "no-face-10s": 8,
-    "looking-away-5s": 2,
-    "Detected cell phone": 7,
-    "Detected book": 7,
-    "Detected laptop": 7,
-    "Detected tablet": 7,
-  };
-
-  // -------- Event Logger --------
   const addEvent = async (msg, type = "info") => {
-    if (interviewEnded.current) return; // Stop logging after interview ends
+    if (interviewEnded.current) return; 
     const newEvent = {
       time: new Date().toLocaleTimeString(),
       message: msg,
@@ -62,7 +48,7 @@ const Dashboard = () => {
     }
   };
 
-  // -------- Face Detection Handler --------
+  // Face Detection Handler 
   const handleFaceDetected = (count) => {
     setFacesDetected(count);
     const now = Date.now();
@@ -81,7 +67,6 @@ const Dashboard = () => {
     }
   };
 
-  // -------- Other Proctor Events --------
   const handleProctorEvent = (type) => {
     const now = Date.now();
     if (type === "no-face-10s") addEvent("No face for >10s", "alert");
@@ -110,7 +95,6 @@ const Dashboard = () => {
     }
   };
 
-  // -------- Timer & Stream --------
   useEffect(() => {
     timerRef.current = setInterval(() => setSessionTime((s) => s + 1), 1000);
     const init = async () => {
@@ -135,16 +119,11 @@ const Dashboard = () => {
     setIsRecording(false);
   };
 
-  // -------- End Interview --------
-  // -------- End Interview --------
   const endInterview = async () => {
-    // Stop recording and timer
     stopStream();
     interviewEnded.current = true;
-    // Stop further event logging
     const finalEventLog = [...eventLog];
 
-    // Define realistic weights and max caps
     const weights = {
       "Background voice detected": 2,
       "Eyes closed detected": 5,
@@ -182,13 +161,11 @@ const Dashboard = () => {
       }
     });
 
-    // Total deduction
     const totalDeduction = Object.values(deductionMap).reduce(
       (a, b) => a + b,
       0
     );
 
-    // Scale for session length (optional, lenient for short interviews)
     const scaledDeduction = totalDeduction * Math.min(sessionTime / 60, 1);
 
     const integrityScore = (Math.max(0, 100 - scaledDeduction)).toPrecision(2);
@@ -209,7 +186,6 @@ const Dashboard = () => {
       console.error("Failed to save session:", err);
     }
 
-    // Log final event
     setEventLog((prev) => [
       ...prev,
       {
@@ -219,13 +195,11 @@ const Dashboard = () => {
       },
     ]);
 
-    // Generate PDF
     generatePDF(
       integrityScore,
       finalEventLog.filter((e) => e.type === "alert")
     );
 
-    // SweetAlert2 popup
     Swal.fire({
       title: "Interview Ended",
       html: `

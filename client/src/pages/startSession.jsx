@@ -10,7 +10,6 @@ const StartSession = () => {
       alert("Please fill all fields");
       return;
     }
-    // Navigate to Dashboard with state
     navigate("/dashboard", { state: { candidateName } });
   };
 

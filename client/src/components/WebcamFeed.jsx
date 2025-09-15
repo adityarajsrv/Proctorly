@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable no-unused-vars */
 /* eslint-disable react/prop-types */
 import { useEffect, useRef, useState } from "react";
@@ -10,7 +11,7 @@ const WebCamFeed = ({
   onFaceDetected,
   onProctorEvent,
   isRecording,
-  interviewEnded, // added prop
+  interviewEnded,
 }) => {
   const videoRef = useRef(null);
   const animRef = useRef(null);
@@ -21,13 +22,13 @@ const WebCamFeed = ({
   const lastLookTime = useRef(Date.now());
   const lastEyeEvent = useRef(0);
 
-  // --- Eye closure detection ---
+  // Eye closure detection
   const EAR_THRESHOLD = 0.3;
   const EYE_CLOSED_SEC = 3;
   const eyeClosedStart = useRef(null);
   const [eyeClosed, setEyeClosed] = useState(false);
 
-  // --- Audio detection ---
+  // Audio detection
   const [audioDetected, setAudioDetected] = useState(false);
   const audioCtxRef = useRef(null);
   const analyserRef = useRef(null);
@@ -49,12 +50,11 @@ const WebCamFeed = ({
     return Math.abs(nose.x - centerX) > 0.1;
   };
 
-  // Load object detection model
   useEffect(() => {
     cocoSsd.load().then((model) => setObjectModel(model));
   }, []);
 
-  // Detect objects each frame
+  // Detect objects
   const detectObjects = async () => {
     if (!videoRef.current || !objectModel) return;
     const predictions = await objectModel.detect(videoRef.current);
@@ -68,7 +68,8 @@ const WebCamFeed = ({
   // Audio detection
   useEffect(() => {
     if (!stream) return;
-    audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+    audioCtxRef.current = new (window.AudioContext ||
+      window.webkitAudioContext)();
     const mic = audioCtxRef.current.createMediaStreamSource(stream);
     analyserRef.current = audioCtxRef.current.createAnalyser();
     analyserRef.current.fftSize = 2048;
@@ -96,7 +97,6 @@ const WebCamFeed = ({
     return () => clearInterval(audioInterval);
   }, [stream, onProctorEvent, audioDetected, interviewEnded]);
 
-  // Face & eye detection
   useEffect(() => {
     if (!videoRef.current || !stream) return;
     videoRef.current.srcObject = stream;
@@ -113,7 +113,7 @@ const WebCamFeed = ({
     });
 
     faceMesh.onResults((results) => {
-      if (interviewEnded) return; // stop processing
+      if (interviewEnded) return;
 
       const faces = results.multiFaceLandmarks || [];
       const count = faces.length;
@@ -141,7 +141,10 @@ const WebCamFeed = ({
             if (!eyeClosed) {
               setEyeClosed(true);
 
-              if (!lastEyeEvent.current || Date.now() - lastEyeEvent.current > 3000) {
+              if (
+                !lastEyeEvent.current ||
+                Date.now() - lastEyeEvent.current > 3000
+              ) {
                 lastEyeEvent.current = Date.now();
                 if (!interviewEnded) onProctorEvent?.("eye-closure");
 
@@ -161,7 +164,8 @@ const WebCamFeed = ({
         await faceMesh.send({ image: videoRef.current });
         await detectObjects();
       }
-      if (!interviewEnded) animRef.current = requestAnimationFrame(processFrame);
+      if (!interviewEnded)
+        animRef.current = requestAnimationFrame(processFrame);
     };
 
     const startVideo = async () => {
@@ -172,7 +176,8 @@ const WebCamFeed = ({
         check();
       });
       setVideoReady(true);
-      if (!interviewEnded) animRef.current = requestAnimationFrame(processFrame);
+      if (!interviewEnded)
+        animRef.current = requestAnimationFrame(processFrame);
     };
 
     startVideo();
@@ -183,7 +188,6 @@ const WebCamFeed = ({
     };
   }, [stream, objectModel, interviewEnded]);
 
-  // Timed checks for face/looking away
   useEffect(() => {
     if (!onProctorEvent) return;
     const interval = setInterval(() => {
@@ -215,7 +219,6 @@ const WebCamFeed = ({
         </div>
       )}
 
-      {/* Recording indicator */}
       <div className="absolute top-2 left-2 flex items-center space-x-2">
         <span
           className={`w-3 h-3 rounded-full ${
@@ -231,7 +234,6 @@ const WebCamFeed = ({
         </span>
       </div>
 
-      {/* Eye closure indicator */}
       {eyeClosed && (
         <div className="absolute top-2 right-2 flex items-center space-x-1 bg-red-600 text-white px-2 py-1 rounded">
           <span className="text-xs font-semibold">Eyes Closed!</span>
