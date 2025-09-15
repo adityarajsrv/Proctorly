@@ -6,6 +6,8 @@ import Swal from "sweetalert2";
 import WebCamFeed from "../components/WebCamFeed";
 
 const Dashboard = () => {
+  const API_BASE = import.meta.env.VITE_API_URL;
+
   const { candidateName = "Candidate" } = useLocation().state || {};
   const [sessionTime, setSessionTime] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
@@ -36,7 +38,7 @@ const Dashboard = () => {
     setEventLog((prev) => [...prev, newEvent]);
 
     try {
-      const res = await fetch("http://localhost:5000/api/events", {
+      const res = await fetch(`${API_BASE}/api/events`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ candidateName, message: msg, type }),
@@ -172,7 +174,7 @@ const Dashboard = () => {
 
     try {
       const eventIds = finalEventLog.filter((e) => e._id).map((e) => e._id);
-      await fetch("http://localhost:5000/api/sessions", {
+      await fetch(`${API_BASE}/api/sessions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
