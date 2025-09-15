@@ -3,16 +3,15 @@ import { useNavigate } from "react-router-dom";
 
 const StartSession = () => {
   const [candidateName, setCandidateName] = useState("");
-  const [candidateID, setCandidateID] = useState("");
   const navigate = useNavigate();
 
   const handleStart = () => {
-    if (!candidateName || !candidateID) {
+    if (!candidateName) {
       alert("Please fill all fields");
       return;
     }
     // Navigate to Dashboard with state
-    navigate("/dashboard", { state: { candidateName, candidateID } });
+    navigate("/dashboard", { state: { candidateName } });
   };
 
   return (
@@ -34,17 +33,6 @@ const StartSession = () => {
             className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
             type="text"
             placeholder="Enter candidate's full name"
-          />
-
-          <label className="block text-gray-700 mt-4 text-sm font-bold mb-2">
-            Candidate ID
-          </label>
-          <input
-            value={candidateID}
-            onChange={(e) => setCandidateID(e.target.value)}
-            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-            type="text"
-            placeholder="Enter candidate's identification number"
           />
         </div>
         <button

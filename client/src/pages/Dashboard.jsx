@@ -1,152 +1,371 @@
+/* eslint-disable no-unused-vars */
 import { useLocation } from "react-router-dom";
 import { useState, useEffect, useRef } from "react";
+import { jsPDF } from "jspdf";
+import Swal from "sweetalert2";
 import WebCamFeed from "../components/WebCamFeed";
 
 const Dashboard = () => {
-  const location = useLocation();
-  const { candidateName = "Random" } = location.state || {};
-
+  const { candidateName = "Candidate" } = useLocation().state || {};
   const [sessionTime, setSessionTime] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
   const [facesDetected, setFacesDetected] = useState(0);
+  const [objectDetected, setObjectDetected] = useState([]);
   const [eventLog, setEventLog] = useState([
-    { time: new Date().toLocaleTimeString(), message: "Session started" },
+    {
+      time: new Date().toLocaleTimeString(),
+      message: "Session started",
+      type: "info",
+    },
   ]);
 
-  const lastLoggedFaceCount = useRef(0);
   const videoStreamRef = useRef(null);
-  const mediaRecorderRef = useRef(null);
+  const lastEventTime = useRef({ face: 0, object: {} });
+  const EVENT_COOLDOWN = 5000;
+  const timerRef = useRef(null);
 
-  // Handle face detection
-  const handleFaceDetected = (count) => {
-    setFacesDetected(count);
+  const interviewEnded = useRef(false); // Flag to stop logging
 
-    if (count !== lastLoggedFaceCount.current) {
-      let message = "";
-      if (count === 0) message = "No face detected";
-      else if (count > 1) message = "Multiple faces detected";
-      else message = "Face detected";
+  // Alert weightage
+  const ALERT_WEIGHTS = {
+    "background-voice": 3,
+    "eye-closure": 5,
+    "multiple-faces": 10,
+    "no-face-10s": 8,
+    "looking-away-5s": 2,
+    "Detected cell phone": 7,
+    "Detected book": 7,
+    "Detected laptop": 7,
+    "Detected tablet": 7,
+  };
 
-      setEventLog((prev) => [
-        ...prev,
-        { time: new Date().toLocaleTimeString(), message },
-      ]);
+  // -------- Event Logger --------
+  const addEvent = async (msg, type = "info") => {
+    if (interviewEnded.current) return; // Stop logging after interview ends
+    const newEvent = {
+      time: new Date().toLocaleTimeString(),
+      message: msg,
+      type,
+    };
+    setEventLog((prev) => [...prev, newEvent]);
 
-      lastLoggedFaceCount.current = count;
+    try {
+      const res = await fetch("http://localhost:5000/api/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ candidateName, message: msg, type }),
+      });
+      const data = await res.json();
+      if (data.success) newEvent._id = data.event._id;
+    } catch (err) {
+      console.error("Failed to log event:", err);
     }
   };
 
-  // Session timer
-  useEffect(() => {
-    const timer = setInterval(() => setSessionTime((prev) => prev + 1), 1000);
-    return () => clearInterval(timer);
-  }, [candidateName]);
+  // -------- Face Detection Handler --------
+  const handleFaceDetected = (count) => {
+    setFacesDetected(count);
+    const now = Date.now();
+    if (count === 0 && now - lastEventTime.current.face > EVENT_COOLDOWN) {
+      addEvent("No face detected", "alert");
+      lastEventTime.current.face = now;
+    } else if (count > 1 && now - lastEventTime.current.face > EVENT_COOLDOWN) {
+      addEvent("Multiple faces detected", "alert");
+      lastEventTime.current.face = now;
+    } else if (
+      count === 1 &&
+      now - lastEventTime.current.face > EVENT_COOLDOWN
+    ) {
+      addEvent("Single face detected", "info");
+      lastEventTime.current.face = now;
+    }
+  };
 
-  // Initialize video stream and recording
+  // -------- Other Proctor Events --------
+  const handleProctorEvent = (type) => {
+    const now = Date.now();
+    if (type === "no-face-10s") addEvent("No face for >10s", "alert");
+    else if (type === "looking-away-5s")
+      addEvent("Candidate looking away >5s", "alert");
+    else if (type === "multiple-faces")
+      addEvent("Multiple faces in frame", "alert");
+    else if (type.startsWith("Detected ")) {
+      const obj = type.replace("Detected ", "");
+      if (
+        !lastEventTime.current.object[obj] ||
+        now - lastEventTime.current.object[obj] > EVENT_COOLDOWN
+      ) {
+        addEvent(`Suspicious item detected: ${obj}`, "alert");
+        lastEventTime.current.object[obj] = now;
+      }
+      setObjectDetected((prev) => (prev.includes(obj) ? prev : [...prev, obj]));
+      setTimeout(
+        () => setObjectDetected((prev) => prev.filter((o) => o !== obj)),
+        5000
+      );
+    } else if (type === "eye-closure") {
+      addEvent("Eyes closed detected", "alert");
+    } else if (type === "background-voice") {
+      addEvent("Background voice detected", "alert");
+    }
+  };
+
+  // -------- Timer & Stream --------
   useEffect(() => {
-    const initStreamAndRecorder = async () => {
+    timerRef.current = setInterval(() => setSessionTime((s) => s + 1), 1000);
+    const init = async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { width: 640, height: 480 },
           audio: true,
         });
         videoStreamRef.current = stream;
-
-        // Setup MediaRecorder
-        const recorder = new MediaRecorder(stream);
-        const chunks = [];
-
-        recorder.ondataavailable = (e) => chunks.push(e.data);
-        recorder.onstop = () => {
-          const blob = new Blob(chunks, { type: "video/webm" });
-          const url = URL.createObjectURL(blob);
-          console.log("Recording saved:", url);
-
-          // Automatically download
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = `${candidateName}_interview.webm`;
-          a.click();
-        };
-
-        recorder.start();
-        mediaRecorderRef.current = recorder;
         setIsRecording(true);
-      } catch (err) {
-        console.error("Error accessing webcam:", err);
+      } catch (e) {
+        console.error("Camera error:", e);
       }
     };
-
-    initStreamAndRecorder();
-
-    return () => {
-      mediaRecorderRef.current?.stop();
-      videoStreamRef.current?.getTracks().forEach((t) => t.stop());
-    };
+    init();
+    return () => stopStream();
   }, []);
 
-  const endInterview = () => {
-    mediaRecorderRef.current?.stop();
+  const stopStream = () => {
+    clearInterval(timerRef.current);
     videoStreamRef.current?.getTracks().forEach((t) => t.stop());
     setIsRecording(false);
-
-    alert("Interview Ended & Report Generated");
   };
 
-  const formatTime = (seconds) => {
-    const minutes = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${minutes.toString().padStart(2, "0")}:${secs
-      .toString()
-      .padStart(2, "0")}`;
+  // -------- End Interview --------
+  // -------- End Interview --------
+  const endInterview = async () => {
+    // Stop recording and timer
+    stopStream();
+    interviewEnded.current = true;
+    // Stop further event logging
+    const finalEventLog = [...eventLog];
+
+    // Define realistic weights and max caps
+    const weights = {
+      "Background voice detected": 2,
+      "Eyes closed detected": 5,
+      "Multiple faces detected": 10,
+      "No face for >10s": 8,
+      "Candidate looking away >5s": 3,
+      "Suspicious item detected: cell phone": 7,
+      "Suspicious item detected: book": 7,
+      "Suspicious item detected: laptop": 7,
+      "Suspicious item detected: tablet": 7,
+    };
+
+    const maxDeduction = {
+      "Background voice detected": 10,
+      "Eyes closed detected": 15,
+      "Multiple faces detected": 20,
+      "No face for >10s": 15,
+      "Candidate looking away >5s": 10,
+      "Suspicious item detected: cell phone": 15,
+      "Suspicious item detected: book": 15,
+      "Suspicious item detected: laptop": 15,
+      "Suspicious item detected: tablet": 15,
+    };
+
+    const deductionMap = {};
+
+    finalEventLog.forEach((e) => {
+      if (e.type === "alert") {
+        const key = e.message;
+        if (!deductionMap[key]) deductionMap[key] = 0;
+        deductionMap[key] += weights[key] || 0;
+        if (deductionMap[key] > (maxDeduction[key] || 100)) {
+          deductionMap[key] = maxDeduction[key];
+        }
+      }
+    });
+
+    // Total deduction
+    const totalDeduction = Object.values(deductionMap).reduce(
+      (a, b) => a + b,
+      0
+    );
+
+    // Scale for session length (optional, lenient for short interviews)
+    const scaledDeduction = totalDeduction * Math.min(sessionTime / 60, 1);
+
+    const integrityScore = (Math.max(0, 100 - scaledDeduction)).toPrecision(2);
+
+    try {
+      const eventIds = finalEventLog.filter((e) => e._id).map((e) => e._id);
+      await fetch("http://localhost:5000/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          candidateName,
+          duration: sessionTime,
+          events: eventIds,
+          integrityScore,
+        }),
+      });
+    } catch (err) {
+      console.error("Failed to save session:", err);
+    }
+
+    // Log final event
+    setEventLog((prev) => [
+      ...prev,
+      {
+        time: new Date().toLocaleTimeString(),
+        message: "Interview ended",
+        type: "info",
+      },
+    ]);
+
+    // Generate PDF
+    generatePDF(
+      integrityScore,
+      finalEventLog.filter((e) => e.type === "alert")
+    );
+
+    // SweetAlert2 popup
+    Swal.fire({
+      title: "Interview Ended",
+      html: `
+      <div class="text-left space-y-2">
+        <p><strong>Candidate:</strong> ${candidateName}</p>
+        <p><strong>Duration:</strong> ${formatTime(sessionTime)}</p>
+        <p><strong>Total Alerts:</strong> ${
+          finalEventLog.filter((e) => e.type === "alert").length
+        }</p>
+        <p class="text-sm text-gray-500 mt-2">PDF Report has been generated and downloaded.</p>
+      </div>
+    `,
+      icon: "success",
+      confirmButtonText: "Close",
+      customClass: {
+        popup: "rounded-2xl shadow-xl p-6",
+        confirmButton:
+          "bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700",
+      },
+      buttonsStyling: false,
+    });
   };
+
+  const generatePDF = (score, alerts) => {
+    const doc = new jsPDF();
+    const lineHeight = 6;
+    const pageHeight = doc.internal.pageSize.height;
+
+    let y = 20;
+    doc.setFontSize(16);
+    doc.text("Proctorly Interview Report", 14, y);
+    y += 15;
+    doc.setFontSize(12);
+    doc.text(`Candidate: ${candidateName}`, 14, y);
+    y += 10;
+    doc.text(`Duration: ${formatTime(sessionTime)}`, 14, y);
+    y += 10;
+    doc.text(`Integrity Score: ${score}`, 14, y);
+    y += 10;
+    doc.text(`Total Alerts: ${alerts.length}`, 14, y);
+    y += 15;
+    doc.text("Event Details:", 14, y);
+    y += 10;
+
+    alerts.forEach((e, i) => {
+      const line = `${e.time} - ${e.message}`;
+      if (y + lineHeight > pageHeight - 10) {
+        doc.addPage();
+        y = 20;
+      }
+      doc.text(line, 14, y);
+      y += lineHeight;
+    });
+
+    doc.save(`${candidateName}_Proctor_Report.pdf`);
+  };
+
+  const formatTime = (s) =>
+    `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(
+      2,
+      "0"
+    )}`;
 
   return (
     <div className="min-h-screen bg-gray-100">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-center border-b border-gray-300 pb-4 mb-4 px-4 pt-4 bg-gray-50">
+      <header className="flex justify-between items-center border-b p-4 bg-gray-50">
         <h1 className="text-2xl font-bold text-blue-900">Proctorly</h1>
-        <div className="flex flex-col md:flex-row items-center space-y-2 md:space-y-0 md:space-x-5 mt-2 md:mt-0">
-          <div className="text-center">
-            <h3 className="text-gray-600 text-sm">Candidate</h3>
-            <h3 className="font-semibold">{candidateName}</h3>
+        <div className="flex gap-6">
+          <div>
+            <div className="text-gray-600 text-sm">Candidate</div>
+            <div className="font-semibold">{candidateName}</div>
           </div>
-          <div className="text-center">
-            <h3 className="text-gray-600 text-sm">Session Time</h3>
-            <h3 className="font-semibold">{formatTime(sessionTime)}</h3>
+          <div>
+            <div className="text-gray-600 text-sm">Session Time</div>
+            <div className="font-semibold">{formatTime(sessionTime)}</div>
           </div>
         </div>
-      </div>
+      </header>
 
-      {/* Main content */}
-      <div className="flex flex-col lg:flex-row px-4 gap-6">
-        <div className="w-full lg:w-2/3">
+      <main className="flex flex-col lg:flex-row gap-6 p-4">
+        <div className="lg:w-2/3">
           <WebCamFeed
             stream={videoStreamRef.current}
             onFaceDetected={handleFaceDetected}
+            onProctorEvent={(type) => {
+              if (!interviewEnded.current) handleProctorEvent(type);
+            }}
             isRecording={isRecording}
+            interviewEnded={interviewEnded.current}
           />
         </div>
 
-        <div className="w-full lg:w-1/3 space-y-6">
-          <div className="bg-white rounded-lg p-6 shadow h-80 overflow-y-auto">
-            <h3 className="text-lg font-medium text-gray-700">Event Log</h3>
-            <ul className="mt-4 space-y-2">
-              {eventLog.map((event, index) => (
-                <li key={index} className="text-sm text-gray-600">
-                  <span className="text-blue-600">{event.time}</span>{" "}
-                  {event.message}
+        <aside className="lg:w-1/3 space-y-4">
+          <div className="bg-white rounded p-4 shadow h-80 overflow-y-auto">
+            <h3 className="font-medium mb-2">Event Log</h3>
+            <ul className="space-y-1 text-sm">
+              {eventLog.map((e, i) => (
+                <li
+                  key={i}
+                  className={
+                    e.type === "alert"
+                      ? "text-red-600 font-medium"
+                      : "text-blue-600"
+                  }
+                >
+                  <span className="mr-2">{e.time}</span>
+                  {e.message}
                 </li>
               ))}
             </ul>
           </div>
-          <div>Faces detected: {facesDetected}</div>
-        </div>
-      </div>
 
-      <div className="px-4 mt-4 flex justify-center">
+          <div className="bg-white rounded p-4 shadow space-y-2">
+            <div>
+              Current faces detected:{" "}
+              <strong
+                className={
+                  facesDetected > 1 ? "text-red-600" : "text-green-700"
+                }
+              >
+                {facesDetected}
+              </strong>
+            </div>
+            <div>
+              Suspicious items detected:{" "}
+              {objectDetected.length > 0 ? (
+                <strong className="text-red-600">
+                  {objectDetected.join(", ")}
+                </strong>
+              ) : (
+                <span className="text-green-700">None</span>
+              )}
+            </div>
+          </div>
+        </aside>
+      </main>
+
+      <div className="p-4 flex justify-center">
         <button
-          className="cursor-pointer w-full md:w-1/4 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition duration-200"
+          className="w-full md:w-1/4 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           onClick={endInterview}
         >
           End Interview & Generate Report
