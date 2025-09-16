@@ -2,9 +2,11 @@
 /* eslint-disable no-unused-vars */
 /* eslint-disable react/prop-types */
 import { useEffect, useRef, useState } from "react";
-import { FaceMesh } from "@mediapipe/face_mesh";
+import * as faceMeshModule from "@mediapipe/face_mesh";
 import * as cocoSsd from "@tensorflow-models/coco-ssd";
 import * as tf from "@tensorflow/tfjs";
+
+const { FaceMesh } = faceMeshModule;
 
 const WebCamFeed = ({
   stream,
@@ -103,7 +105,7 @@ const WebCamFeed = ({
 
     const faceMesh = new FaceMesh({
       locateFile: (file) =>
-        `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`,
+        `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/${file}`,
     });
 
     faceMesh.setOptions({
