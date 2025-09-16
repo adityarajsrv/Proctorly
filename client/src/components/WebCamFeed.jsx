@@ -2,11 +2,9 @@
 /* eslint-disable no-unused-vars */
 /* eslint-disable react/prop-types */
 import { useEffect, useRef, useState } from "react";
-import * as faceMeshModule from "@mediapipe/face_mesh";
+import { FaceMesh } from "@mediapipe/face_mesh/face_mesh.js";
 import * as cocoSsd from "@tensorflow-models/coco-ssd";
 import * as tf from "@tensorflow/tfjs";
-
-const { FaceMesh } = faceMeshModule;
 
 const WebCamFeed = ({
   stream,
