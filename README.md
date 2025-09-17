@@ -141,10 +141,6 @@ http://localhost:5173
 
 ---
 
-## License
-
-MIT License
-
 ## Screenshots
 
 ### Start Session Page
